@@ -7,7 +7,7 @@ class Dataset:
     def __init__(self, path):
         self._path = path
         self._batch_size = None
-        self._file_paths = []
+        self._file_paths: list = []
 
         self.images = []
         self._total_image = 0
@@ -24,6 +24,8 @@ class Dataset:
             temp = [os.path.join(p, f) for f in ls if f.endswith('.jpeg')]
             self._file_paths.append(temp)
         self._total_image = len(self._file_paths[0] * 2)
+
+        self._file_paths = self._file_paths[:30000]
 
     def load_batch(self, batch):
         if self._batch_size is not None:

@@ -64,13 +64,18 @@ class GAN:
         return outputs
 
     def create_discriminator(self, is_trainable: bool = False):
-        inputs = Input(shape=(self.input_width, self.input_height, self.input_channel),
-                       batch_size=self.batch_size,
-                       name='discriminator/input')
+        inputs_gen = Input(shape=(self.input_width, self.input_height, self.input_channel),
+                           batch_size=self.batch_size,
+                           name='discriminator/input_gen')
+        inputs_low = Input(shape=(self.input_width, self.input_height, self.input_channel),
+                             batch_size=self.batch_size,
+                             name='discriminator/input_low')
+
+        inputs = Concatenate(name='discriminator/inputs')([inputs_gen, inputs_low])
 
         outputs = self._discriminator_network(inputs)
 
-        model = Model(inputs=inputs, outputs=outputs, name='Discriminator_Model')
+        model = Model(inputs=[inputs_gen, inputs_low], outputs=outputs, name='Discriminator_Model')
         model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
 
         self.discriminator = model
@@ -102,14 +107,11 @@ class GAN:
 
     def create_adversarial(self):
         low_input = Input(shape=self.input_shape, batch_size=self.batch_size, name='adversarial/input_low')
+        high_input = Input(shape=self.input_shape, batch_size=self.batch_size, name='adversarial/input_high')
 
         gen_output = self.generator(low_input)
 
-        # low_high = Concatenate(axis=3, name='adversarial/concat_low_high')([low_input, high_input])
-        # low_gen = Concatenate(axis=3, name='adversarial/concat_low_gen')([low_input, gen_output])
-        # disc_input = Concatenate(axis=0, name='adversarial/concat_low_high_low_gen')([low_high, low_gen])
-
-        disc_output = self.discriminator(gen_output)
+        disc_output = self.discriminator([gen_output, high_input])
 
         model = Model(inputs=low_input, outputs=disc_output, name='Adversarial_Model')
         model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
@@ -146,13 +148,15 @@ class Train:
                 y_disc_real[:] = 0.9
                 y_disc_fake = np.zeros(self.batch_size)
 
-                disc_loss_real = self.discriminator.train_on_batch(high_input, y_disc_real)
-                disc_loss_fake = self.discriminator.train_on_batch(fake_output, y_disc_fake)
+                disc_loss_real = self.discriminator.train_on_batch([high_input, low_input], y_disc_real)
+                disc_loss_fake = self.discriminator.train_on_batch([fake_output, low_input], y_disc_fake)
                 disc_loss = 0.5 * np.add(disc_loss_real, disc_loss_fake)
 
                 y_gen = np.ones(self.batch_size)
-                gen_loss = self.adversarial.train_on_batch(low_input, y_gen)
+                gen_loss = self.adversarial.train_on_batch([low_input, high_input], y_gen)
                 if batch % 100 == 0:
-                    print(f'Batch: {batch} \t Discriminator Loss: {disc_loss[0]:2.3f} Accuracy: {disc_loss[1]:3.2f} \t\t Generator Loss: {gen_loss[0]:3.2f}')
+                    print(
+                        f'Batch: {batch} \t Discriminator Loss: {disc_loss[0]:2.3f} Accuracy: {disc_loss[1]:3.2f} \t\t Generator Loss: {gen_loss[0]:3.2f}')
         # noinspection PyUnboundLocalVariable
-        print(f'Epoch: {epoch} \t Discriminator Loss: {disc_loss[0]:2.3f} Accuracy: {disc_loss[1]:3.2f} \t\t Generator Loss: {gen_loss[0]:3.2f}')
+        print(
+            f'Epoch: {epoch} \t Discriminator Loss: {disc_loss[0]:2.3f} Accuracy: {disc_loss[1]:3.2f} \t\t Generator Loss: {gen_loss[0]:3.2f}')
