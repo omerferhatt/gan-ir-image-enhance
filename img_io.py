@@ -13,9 +13,8 @@ class Dataset:
         self._total_image = 0
 
     def __str__(self):
-        log = f"""
-                Total high image: {len(self._file_paths[0])}\n
-                Total low image {len(self._file_paths[1])}:"""
+        log = f"""Total high image: {len(self._file_paths[0])}\n
+                  Total low image {len(self._file_paths[1])}:"""
         return log
 
     def take_file_paths(self):
