@@ -1,23 +1,22 @@
 import numpy as np
-import cv2
-import os
 import tensorflow as tf
-from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Activation, Add, BatchNormalization, LeakyReLU
 from tensorflow.keras.layers import Input, Conv2D, Conv2DTranspose, Dense, Flatten
+from tensorflow.keras.models import Model
+
+from img_io import Dataset
 
 
 class GAN:
-    def __init__(self, input_shape, batch_size, epoch, optimizer, loss, metrics):
+    def __init__(self,
+                 input_shape: tuple,
+                 optimizer: tf.keras.optimizers.Optimizer,
+                 loss: str,
+                 metrics: list):
         self.input_shape = input_shape
         self.input_width = input_shape[0]
         self.input_height = input_shape[1]
         self.input_channel = input_shape[2]
-
-        self.epoch = epoch
-        self.batch_size = batch_size
-        self.steps_per_epoch = None
-        self.image_count = None
 
         self.optimizer = optimizer
         self.loss = loss
@@ -26,9 +25,6 @@ class GAN:
         self.generator = None
         self.discriminator = None
         self.adversarial = None
-
-        self.img_high = None
-        self.img_low = None
 
     def create_generator(self):
         inputs = Input(shape=(self.input_width, self.input_height, self.input_channel), name='Input_Generator')
@@ -53,7 +49,7 @@ class GAN:
 
         self.generator = model
 
-    def create_discriminator(self, is_trainable=False):
+    def create_discriminator(self, is_trainable: bool = False):
         inputs = Input(shape=(self.input_width, self.input_height, self.input_channel * 2), name='Input_Discriminator')
 
         x = Conv2D(64, kernel_size=(4, 4), strides=(2, 2), padding='same', name='2D_Conv_1')(inputs)
@@ -99,41 +95,30 @@ class GAN:
 
         self.adversarial = model
 
-    def load_data(self, path):
-        images = []
-        paths = [os.path.join(path, 'high'), os.path.join(path, 'low')]
-        for index, p in enumerate(paths):
-            ls = os.listdir(p)
-            cnt = 0
-            for f in ls:
-                if cnt % 20 == 0:
-                    if f.endswith('.jpeg'):
-                        try:
-                            fp = os.path.join(p, f)
-                            img = cv2.imread(fp, cv2.IMREAD_COLOR)
-                            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                            img = img * 1. / 255
-                            images.append(img)
-                        except ValueError:
-                            print('Error occured while image reading')
-                cnt += 1
 
-        self.img_high = np.array(images[:len(images) // 2])
-        self.img_low = np.array(images[len(images) // 2:])
+class Train:
+    def __init__(self, model: GAN, dataset: Dataset, epoch: int, batch_size: int):
+        self.model = model
+        self.adversarial: tf.keras.models.Model = model.adversarial
+        self.generator: tf.keras.models.Model = model.generator
+        self.discriminator: tf.keras.models.Model = model.discriminator
 
-        self.img_high = self.img_high[:1500]
-        self.img_low = self.img_low[:1500]
+        self.total_image: int = dataset.total_image
 
-        if len(self.img_low) == len(self.img_high):
-            self.image_count = len(self.img_low)
-            self.steps_per_epoch = int(self.image_count/self.batch_size)
+        self.dataset = dataset
+        self.dataset.batch_size = batch_size
 
-    def train_discriminator(self):
+        self.epoch: int = epoch
+        self.batch_size: int = batch_size
+        if self.dataset.total_image % self.dataset.batch_size != 0:
+            self.steps_per_epoch = int((self.dataset.total_image / self.dataset.batch_size) + 1)
+        else:
+            self.steps_per_epoch = int(self.dataset.total_image / self.dataset.batch_size)
+
+    def train_on_batch(self):
         for epoch in range(self.epoch):
             for batch in range(self.steps_per_epoch):
-
-                low_input = self.img_low[batch:batch + self.batch_size]
-                high_input = self.img_high[batch:batch + self.batch_size]
+                high_input, low_input = self.dataset.load_batch(batch)
                 fake_output = self.generator.predict(low_input)
 
                 low_high = np.concatenate((low_input, high_input), axis=3)
@@ -148,4 +133,5 @@ class GAN:
                 y_gen = np.ones(self.batch_size)
                 gen_loss = self.adversarial.train_on_batch([high_input, low_input], y_gen)
 
-            print(f'Epoch: {epoch} \t Discriminator Loss: {disc_loss} \t\t Generator Loss: {gen_loss}')
+        # noinspection PyUnboundLocalVariable
+        print(f'Epoch: {epoch} \t Discriminator Loss: {disc_loss} \t\t Generator Loss: {gen_loss}')
