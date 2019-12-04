@@ -7,6 +7,8 @@ from tensorflow.keras.models import Model
 from img_io import Dataset
 
 
+# GAN model class, it contains all sub models and adversarial model itself.
+# Model networks and inputs can be editable from model schemes
 class GAN:
     def __init__(self,
                  input_shape: tuple,
@@ -14,26 +16,30 @@ class GAN:
                  optimizer: tf.keras.optimizers.Optimizer,
                  loss: str,
                  metrics: list):
+        # Model input information
         self.input_shape = input_shape
         self.input_width = input_shape[0]
         self.input_height = input_shape[1]
         self.input_channel = input_shape[2]
 
+        # Model compile informations
         self.batch_size = batch_size
-
         self.optimizer = optimizer
         self.loss = loss
         self.metrics = metrics
 
-        self.generator = None
-        self.discriminator = None
-        self.adversarial = None
+        # Sub-Models and Adversarial Model
+        self.generator = self.create_generator()
+        self.discriminator = self.create_generator()
+        self.adversarial = self.create_adversarial()
 
+        # Private network schemes
         self.__generator_network = None
         self.__discriminator_network = None
         self.__generator_outputs = None
         self.__discriminator_outputs = None
 
+    # Creates generator sub-model of adversarial network
     def create_generator(self):
         inputs = Input(shape=(self.input_width, self.input_height, self.input_channel),
                        batch_size=self.batch_size,
@@ -41,10 +47,9 @@ class GAN:
         outputs = self._generator_network(inputs)
 
         model = Model(inputs=inputs, outputs=outputs, name='Generator_Model')
-        # model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
+        return model
 
-        self.generator = model
-
+    # Generator network scheme
     @staticmethod
     def _generator_network(inputs):
         x = Conv2D(64, kernel_size=(4, 4), strides=(2, 2), padding='same', name='generator/b1/conv2d')(inputs)
@@ -63,13 +68,14 @@ class GAN:
         outputs = Activation('tanh', name='generator/b4/tanh')(x)
         return outputs
 
+    # Creates discriminator sub-model of adversarial network
     def create_discriminator(self, is_trainable: bool = False):
         inputs_gen = Input(shape=(self.input_width, self.input_height, self.input_channel),
                            batch_size=self.batch_size,
                            name='discriminator/input_gen')
         inputs_low = Input(shape=(self.input_width, self.input_height, self.input_channel),
-                             batch_size=self.batch_size,
-                             name='discriminator/input_low')
+                           batch_size=self.batch_size,
+                           name='discriminator/input_low')
 
         inputs = Concatenate(name='discriminator/inputs')([inputs_gen, inputs_low])
 
@@ -78,9 +84,10 @@ class GAN:
         model = Model(inputs=[inputs_gen, inputs_low], outputs=outputs, name='Discriminator_Model')
         model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
 
-        self.discriminator = model
-        self.discriminator.trainable = is_trainable
+        model.trainable = is_trainable
+        return model
 
+    # Discriminator network scheme
     @staticmethod
     def _discriminator_network(inputs):
         x = Conv2D(64, kernel_size=(4, 4), strides=(2, 2), padding='same', name='discriminator/b1/conv2d')(inputs)
@@ -105,39 +112,46 @@ class GAN:
 
         return outputs
 
+    # Creates combined network from generative and discriminator sub-models to create adversarial model
     def create_adversarial(self):
         low_input = Input(shape=self.input_shape, batch_size=self.batch_size, name='adversarial/input_low')
         high_input = Input(shape=self.input_shape, batch_size=self.batch_size, name='adversarial/input_high')
 
         gen_output = self.generator(low_input)
-
         disc_output = self.discriminator([gen_output, high_input])
 
         model = Model(inputs=low_input, outputs=disc_output, name='Adversarial_Model')
         model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
 
-        self.adversarial = model
+        return model
 
 
+# Train given model with given dataset.
+# Epochs and batch sizes can be editable
 class Train:
     def __init__(self, model: GAN, dataset: Dataset, epoch: int, batch_size: int):
+        # Models itself
         self.model = model
+        # Networks inside main GAN model
         self.adversarial: tf.keras.models.Model = model.adversarial
         self.generator: tf.keras.models.Model = model.generator
         self.discriminator: tf.keras.models.Model = model.discriminator
 
+        # Total image number in dataset.
+        # Not sum of high and low
         self.total_image: int = dataset.total_image
 
+        # Dataset object and selected load batch size
+        # Batch size need to be same with models batch size
         self.dataset = dataset
         self.dataset.batch_size = batch_size
 
+        # Training parameters
         self.epoch: int = epoch
         self.batch_size: int = batch_size
-        if self.dataset.total_image % self.dataset.batch_size != 0:
-            self.steps_per_epoch = int((self.dataset.total_image / self.dataset.batch_size) + 1)
-        else:
-            self.steps_per_epoch = int(self.dataset.total_image / self.dataset.batch_size)
+        self.steps_per_epoch: int = int(self.dataset.total_image / self.dataset.batch_size)
 
+    # Trains model with batches
     def train_on_batch(self):
         for epoch in range(self.epoch):
             for batch in range(self.steps_per_epoch):
@@ -145,7 +159,6 @@ class Train:
                 fake_output = self.generator.predict(low_input)
 
                 y_disc_real = np.ones(self.batch_size)
-                y_disc_real[:] = 0.9
                 y_disc_fake = np.zeros(self.batch_size)
 
                 disc_loss_real = self.discriminator.train_on_batch([high_input, low_input], y_disc_real)
@@ -156,7 +169,13 @@ class Train:
                 gen_loss = self.adversarial.train_on_batch([low_input, high_input], y_gen)
                 if batch % 100 == 0:
                     print(
-                        f'Batch: {batch} \t Discriminator Loss: {disc_loss[0]:2.3f} Accuracy: {disc_loss[1]:3.2f} \t\t Generator Loss: {gen_loss[0]:3.2f}')
+                        f'Step in Epoch: {batch}/{self.steps_per_epoch}'
+                        f'Discriminator Loss: {disc_loss[0]:2.3f}'
+                        f'Accuracy: {disc_loss[1]:3.2f}'
+                        f'Generator Loss: {gen_loss[0]:3.2f}')
         # noinspection PyUnboundLocalVariable
         print(
-            f'Epoch: {epoch} \t Discriminator Loss: {disc_loss[0]:2.3f} Accuracy: {disc_loss[1]:3.2f} \t\t Generator Loss: {gen_loss[0]:3.2f}')
+            f'Epoch: {epoch}/{self.steps_per_epoch}'
+            f'Discriminator Loss: {disc_loss[0]:2.3f}'
+            f'Accuracy: {disc_loss[1]:3.2f} \t'
+            f'Generator Loss: {gen_loss[0]:3.2f}')
