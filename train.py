@@ -1,25 +1,23 @@
 import os
+
 from img_io import Dataset
 from gan import GAN, Train
-from tensorflow.keras.optimizers import Adam
 
-os.chdir('C:\\Users\\omerf\\PycharmProjects\\gan-ir-image-enhance')
+# For Windows based OS, otherwise comment below
+os.chdir(r'C:\Users\omerf\PycharmProjects\gan-ir-image-enhance')
 
-data = Dataset('data_preprocess\\output_dir')
-data.take_file_paths()
+# For Unix/Linux based OS, otherwise comment below
+# os.chdir('/home/ferhat/PycharmProjects/gan-ir-image-enhance')
 
-opt = Adam(learning_rate=0.0002, beta_1=0.5)
+data = Dataset('data_preprocess/output_dir')
 
-gan = GAN(input_shape=(256, 256, 3),
-          batch_size=1,
-          optimizer=opt,
-          loss='binary_crossentropy',
-          metrics=['accuracy'])
+model = GAN(input_shape=(256, 256, 3),
+            loss='binary_crossentropy',
+            metrics=['accuracy'],
+            optimizer='adam',
+            learning_rate=0.0002,
+            beta1=0.5)
 
 
-gan.create_generator()
-gan.create_discriminator(is_trainable=False)
-gan.create_adversarial()
-
-train = Train(gan, data, epoch=10, batch_size=1)
+train = Train(model, data, epoch=10, batch_size=1)
 train.train_on_batch()

@@ -1,8 +1,10 @@
 import numpy as np
+# import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras.layers import Activation, Add, BatchNormalization, LeakyReLU
 from tensorflow.keras.layers import Input, Conv2D, Conv2DTranspose, Dense, Flatten, Concatenate
 from tensorflow.keras.models import Model
+
 
 from img_io import Dataset
 
@@ -12,10 +14,12 @@ from img_io import Dataset
 class GAN:
     def __init__(self,
                  input_shape: tuple,
-                 batch_size: int,
-                 optimizer: tf.keras.optimizers.Optimizer,
                  loss: str,
-                 metrics: list):
+                 metrics: list,
+                 optimizer: str,
+                 learning_rate: float,
+                 beta1: float,
+                 beta2: float = None):
         # Model input information
         self.input_shape = input_shape
         self.input_width = input_shape[0]
@@ -23,14 +27,14 @@ class GAN:
         self.input_channel = input_shape[2]
 
         # Model compile informations
-        self.batch_size = batch_size
-        self.optimizer = optimizer
+        self.batch_size = None
+        self.optimizer = self.create_optimizer(optimizer, learning_rate, beta1, beta2)
         self.loss = loss
         self.metrics = metrics
 
         # Sub-Models and Adversarial Model
         self.generator = self.create_generator()
-        self.discriminator = self.create_generator()
+        self.discriminator = self.create_discriminator(is_trainable=False)
         self.adversarial = self.create_adversarial()
 
         # Private network schemes
@@ -38,6 +42,15 @@ class GAN:
         self.__discriminator_network = None
         self.__generator_outputs = None
         self.__discriminator_outputs = None
+
+    # noinspection PyProtectedMember
+    @staticmethod
+    def create_optimizer(opt, lr, b1, b2=None):
+        _optimizer = tf.keras.optimizers.get(opt)
+        _optimizer._set_hyper('learning_rate', lr)
+        _optimizer._set_hyper('beta_1', b1)
+        if b2 is not None: _optimizer._set_hyper('beta_2', b2)
+        return _optimizer
 
     # Creates generator sub-model of adversarial network
     def create_generator(self):
@@ -132,6 +145,7 @@ class Train:
     def __init__(self, model: GAN, dataset: Dataset, epoch: int, batch_size: int):
         # Models itself
         self.model = model
+        self.model.batch_size = batch_size
         # Networks inside main GAN model
         self.adversarial: tf.keras.models.Model = model.adversarial
         self.generator: tf.keras.models.Model = model.generator
@@ -167,15 +181,42 @@ class Train:
 
                 y_gen = np.ones(self.batch_size)
                 gen_loss = self.adversarial.train_on_batch([low_input, high_input], y_gen)
-                if batch % 100 == 0:
-                    print(
-                        f'Step in Epoch: {batch}/{self.steps_per_epoch}'
-                        f'Discriminator Loss: {disc_loss[0]:2.3f}'
-                        f'Accuracy: {disc_loss[1]:3.2f}'
-                        f'Generator Loss: {gen_loss[0]:3.2f}')
+                self.train_logger('batch', epoch, batch, disc_loss, gen_loss)
+
         # noinspection PyUnboundLocalVariable
-        print(
-            f'Epoch: {epoch}/{self.steps_per_epoch}'
-            f'Discriminator Loss: {disc_loss[0]:2.3f}'
-            f'Accuracy: {disc_loss[1]:3.2f} \t'
-            f'Generator Loss: {gen_loss[0]:3.2f}')
+        self.train_logger('epoch', epoch, batch, disc_loss, gen_loss)
+
+    def train_logger(self, log_select, epoch, batch, disc_loss, gen_loss):
+        if log_select == 'batch' and batch % 20 == 0:
+            print(f'Step in Epoch: {batch}/{self.steps_per_epoch}'
+                  f'Discriminator Loss: {disc_loss[0]:2.3f}'
+                  f'Accuracy: %{disc_loss[1] * 100:3.2f}'
+                  f'Generator Loss: {gen_loss[0]:3.2f}')
+        if log_select == 'epoch':
+            print(f'Epoch: {epoch}/{self.epoch}'
+                  f'Avg. Discriminator Loss: {disc_loss[0]:2.5f}'
+                  f'Avg. Accuracy: %{disc_loss[1] * 100:3.2f} \t'
+                  f'Avg. Generator Loss: {gen_loss[0]:2.5f}')
+
+    def save_sample_images(self, epoch):
+        # TODO run generator with sample images than save them into disk
+        # r, c = 2, 3
+        #
+        # sampled_labels = np.arange(0, 10).reshape(-1, 1)
+        #
+        # gen_imgs = self.generator.predict([noise, sampled_labels])
+        #
+        # # Rescale images 0 - 1
+        # gen_imgs = 0.5 * gen_imgs + 0.5
+        #
+        # fig, axs = plt.subplots(r, c)
+        # cnt = 0
+        # for i in range(r):
+        #     for j in range(c):
+        #         axs[i,j].imshow(gen_imgs[cnt,:,:,0], cmap='gray')
+        #         axs[i,j].set_title("Digit: %d" % sampled_labels[cnt])
+        #         axs[i,j].axis('off')
+        #         cnt += 1
+        # fig.savefig("images/%d.png" % epoch)
+        # plt.close()
+        pass

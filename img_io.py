@@ -15,6 +15,8 @@ class Dataset:
             self.shuffle_dataset(shuffle)
 
         self.images: list = []
+        # TODO add sample image instance
+        # self.sample_images
 
     def __str__(self):
         log = f"""Total high image: {self._total_image//2}, Total low image {self._total_image//2}:"""
@@ -41,26 +43,31 @@ class Dataset:
         if self._batch_size is not None:
             self.images = []
             self.images.clear()
+
+            def read_image(file: str) -> np.ndarray:
+                temp = cv2.imread(file, cv2.IMREAD_COLOR)
+                temp = cv2.cvtColor(temp, cv2.COLOR_BGR2RGB)
+                return temp * 1. / 255
+
             for high_low in range(2):
-                temp_list = []
+                temp_list_ = []
                 if len(self.file_paths[high_low][batch * self._batch_size:]) >= self._batch_size:
                     for b in range(self._batch_size):
-                        file = self.file_paths[high_low][batch * self._batch_size + b]
-                        temp = cv2.imread(file, cv2.IMREAD_COLOR)
-                        temp = cv2.cvtColor(temp, cv2.COLOR_BGR2RGB)
-                        temp = temp * 1. / 255
-                        temp_list.append(temp)
+                        file_ = self.file_paths[high_low][batch * self._batch_size + b]
+                        temp_ = read_image(file_)
+                        temp_list_.append(temp_)
                 else:
-                    rang = len(self.file_paths[high_low][:]) - len(self.file_paths[high_low][batch * self._batch_size:])
-                    for b in range(rang):
-                        file = self.file_paths[high_low][batch * self._batch_size + b]
-                        temp = cv2.imread(file, cv2.IMREAD_COLOR)
-                        temp = cv2.cvtColor(temp, cv2.COLOR_BGR2RGB)
-                        temp = temp * 1. / 255
-                        temp_list.append(temp)
-                self.images.append(temp_list)
+                    for b in range(len(self.file_paths[high_low][batch * self._batch_size:])):
+                        file_ = self.file_paths[high_low][batch * self._batch_size + b]
+                        temp_ = read_image(file_)
+                        temp_list_.append(temp_)
+                self.images.append(temp_list_)
             self.images = np.array(self.images)
             return np.array(self.images[0]), np.array(self.images[1])
+
+    def load_sample_images(self):
+        # TODO create function that load sample images from folder
+        pass
 
     @property
     def batch_size(self):
@@ -69,3 +76,7 @@ class Dataset:
     @batch_size.setter
     def batch_size(self, batch_size):
         self._batch_size = batch_size
+
+    @property
+    def total_image(self):
+        return self._total_image
