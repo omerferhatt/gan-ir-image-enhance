@@ -1,5 +1,5 @@
-import os
 import numpy as np
+import os
 import cv2
 import random
 
@@ -15,11 +15,10 @@ class Dataset:
             self.shuffle_dataset(shuffle)
 
         self.images: list = []
-        # TODO add sample image instance
-        # self.sample_images
+        self.sample_images = self.load_sample_images()
 
     def __str__(self):
-        log = f"""Total high image: {self._total_image//2}, Total low image {self._total_image//2}:"""
+        log = f"""Total high image: {self._total_image}, Total low image {self._total_image}:"""
         return log
 
     def take_file_paths(self):
@@ -28,9 +27,10 @@ class Dataset:
         for p in _paths:
             ls = os.listdir(p)
             temp = [os.path.join(p, f) for f in ls if f.endswith('.jpeg')]
+            temp.sort()
             image_paths.append(temp)
 
-        total_image = len(image_paths[0] * 2)
+        total_image = len(image_paths[0])
         return image_paths, total_image
 
     def shuffle_dataset(self, seed):
@@ -47,7 +47,7 @@ class Dataset:
             def read_image(file: str) -> np.ndarray:
                 temp = cv2.imread(file, cv2.IMREAD_COLOR)
                 temp = cv2.cvtColor(temp, cv2.COLOR_BGR2RGB)
-                return temp * 1. / 255
+                return temp / 127.5 - 1
 
             for high_low in range(2):
                 temp_list_ = []
@@ -65,9 +65,18 @@ class Dataset:
             self.images = np.array(self.images)
             return np.array(self.images[0]), np.array(self.images[1])
 
-    def load_sample_images(self):
-        # TODO create function that load sample images from folder
-        pass
+    @staticmethod
+    def load_sample_images():
+        path = '/home/ferhat/PycharmProjects/gan-ir-image-enhance/sample_input'
+        ls = os.listdir(path)
+        full_dir = [os.path.join(path, p) for p in ls]
+        temp = []
+        for sample in full_dir:
+            img = cv2.imread(sample, cv2.IMREAD_COLOR)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            temp.append(img / 127.5 - 1)
+
+        return np.array(temp)
 
     @property
     def batch_size(self):
