@@ -14,7 +14,7 @@ os.chdir('/home/ferhat/PycharmProjects/gan-ir-image-enhance')
 
 data = Dataset('data_preprocess/output_dir', shuffle=2)
 
-opt = Adam()
+opt = Adam(lr=0.0002, beta_1=0.5)
 
 model = GAN(input_shape=(256, 256, 3),
             loss='binary_crossentropy',
@@ -25,5 +25,5 @@ model.create_discriminator(is_trainable=False)
 model.create_generator()
 model.create_adversarial()
 
-train = Train(model, data, epoch=10, batch_size=10)
+train = Train(model, data, epoch=10, batch_size=1)
 train.train_on_batch()

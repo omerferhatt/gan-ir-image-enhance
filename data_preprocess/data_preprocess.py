@@ -7,7 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 from tqdm import tqdm
-from time import sleep
 
 # Argument parser for console inputs
 parser = argparse.ArgumentParser(description='Dataset preparation for GAN input')
@@ -39,12 +38,14 @@ fn = [join(parameters.raw_dir, f) for f in listdir(dir_raw_img)]
 
 
 def img_contrast_edit(image):
-    clh_img = clh.apply(image)
+    # clh_img = clh.apply(image)
+    img = image
     low_contr_image = cv2.convertScaleAbs(image, alpha=parameters.contrast, beta=parameters.brightness)
-    return low_contr_image, clh_img
+    return low_contr_image, img
 
 
-clh = cv2.createCLAHE(clipLimit=2, tileGridSize=(4, 4))
+# clh = cv2.createCLAHE(clipLimit=2, tileGridSize=(4, 4))
+
 for folder in tqdm(fn, desc='Folder', unit='fold'):
     filename_raw = [join(folder, k) for k in listdir(folder) if isfile(join(folder, k)) and k.endswith('.png')]
     # For windows
@@ -71,7 +72,4 @@ for folder in tqdm(fn, desc='Folder', unit='fold'):
             j += 1
 
         j_sum += j
-        sleep(0.001)
     print(f"Total {2 * j_sum} number sub-image(s) saved from {i} image(s)\n")
-    sleep(0.001)
-

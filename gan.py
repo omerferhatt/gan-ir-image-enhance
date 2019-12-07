@@ -52,20 +52,20 @@ class GAN:
     # Generator network scheme
     @staticmethod
     def _generator_network(inputs):
-        init = RandomNormal(stddev=0.02)
-        x = Conv2D(64, kernel_size=(4, 4), strides=(2, 2), padding='same', kernel_initializer=init, name='generator/b1/conv2d')(inputs)
+        x = Conv2D(64, kernel_size=(4, 4), strides=(1, 1), padding='same', name='generator/b1/conv2d')(inputs)
         x_add1 = Activation('relu', name='generator/b1/relu')(x)
 
-        x = Conv2D(64, kernel_size=(3, 3), strides=(1, 1), padding='same', kernel_initializer=init, name='generator/b2/conv2d')(x_add1)
+        x = Conv2D(64, kernel_size=(3, 3), strides=(1, 1), padding='same', name='generator/b2/conv2d')(x_add1)
         x = BatchNormalization(name='generator/b2/batch_norm')(x)
         x = Activation('relu', name='generator/b2/relu')(x)
 
-        x = Conv2D(64, kernel_size=(3, 3), strides=(1, 1), padding='same', kernel_initializer=init, name='generator/b3/conv2d')(x)
+        x = Conv2D(64, kernel_size=(3, 3), strides=(1, 1), padding='same', name='generator/b3/conv2d')(x)
         x = BatchNormalization(name='generator/b3/batch_norm')(x)
         x_add2 = Activation('relu', name='generator/b3/relu')(x)
 
-        x = Add(name='generator/b4/skip_con')([x_add1, x_add2])
-        x = Conv2DTranspose(3, kernel_size=(4, 4), strides=(2, 2), padding='same', kernel_initializer=init, name='generator/b4/deconv2d')(x)
+        x = Concatenate(name='generator/b4/skip_con1')([x_add1, x_add2])
+
+        x = Conv2DTranspose(3, kernel_size=(4, 4), strides=(1, 1), padding='same', name='generator/b4/deconv2d')(x)
         outputs = Activation('tanh', name='generator/b4/tanh')(x)
         return outputs
 
@@ -73,14 +73,14 @@ class GAN:
     def create_discriminator(self, is_trainable: bool = False):
         inputs_gen = Input(shape=(self.input_width, self.input_height, self.input_channel),
                            name='discriminator/input_gen')
-        # inputs_low = Input(batch_shape=(self.batch_size, self.input_width, self.input_height, self.input_channel),
-        #                    name='discriminator/input_low')
+        inputs_low = Input(batch_shape=(self.batch_size, self.input_width, self.input_height, self.input_channel),
+                           name='discriminator/input_low')
 
-        # inputs = Concatenate(name='discriminator/inputs')([inputs_gen, inputs_low])
+        inputs = Concatenate(name='discriminator/inputs')([inputs_gen, inputs_low])
 
-        outputs = self._discriminator_network(inputs_gen)
+        outputs = self._discriminator_network(inputs)
 
-        model = Model(inputs=inputs_gen, outputs=outputs, name='Discriminator_Model')
+        model = Model(inputs=[inputs_gen, inputs_low], outputs=outputs, name='Discriminator_Model')
         model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
 
         self.discriminator = model
@@ -91,7 +91,7 @@ class GAN:
     def _discriminator_network(inputs):
         init = RandomNormal(stddev=0.02)
         x = Conv2D(64, kernel_size=(4, 4), strides=(2, 2), padding='same', kernel_initializer=init, name='discriminator/b1/conv2d')(inputs)
-        x = LeakyReLU(alpha=0.1, name='discriminator/b1/leaky')(x)
+        x = LeakyReLU(alpha=0.2, name='discriminator/b1/leaky')(x)
 
         x = Conv2D(128, kernel_size=(4, 4), strides=(2, 2), padding='same', kernel_initializer=init, name='discriminator/b2/conv2d')(x)
         x = BatchNormalization(name='discriminator/b2/batch_norm')(x)
@@ -120,7 +120,7 @@ class GAN:
         #                    name='adversarial/input_high')
 
         gen_output = self.generator(low_input)
-        disc_output = self.discriminator(gen_output)
+        disc_output = self.discriminator([gen_output, low_input])
 
         model = Model(inputs=low_input, outputs=disc_output, name='Adversarial_Model')
         model.compile(optimizer=self.optimizer, loss=self.loss, )
@@ -167,8 +167,8 @@ class Train:
                 high_input, low_input = self.dataset.load_batch(batch)
                 fake_output = self.generator.predict(low_input)
 
-                disc_loss_real = self.discriminator.train_on_batch(high_input, y_disc_real)
-                disc_loss_fake = self.discriminator.train_on_batch(fake_output, y_disc_fake)
+                disc_loss_real = self.discriminator.train_on_batch([high_input, low_input], y_disc_real)
+                disc_loss_fake = self.discriminator.train_on_batch([fake_output, low_input], y_disc_fake)
                 disc_loss = 0.5 * np.add(disc_loss_real, disc_loss_fake)
 
                 gen_loss = self.adversarial.train_on_batch(low_input, y_gen)
@@ -178,14 +178,14 @@ class Train:
         self.train_logger('epoch', epoch, batch, disc_loss, gen_loss)
 
     def train_logger(self, log_select, epoch, batch, disc_loss, gen_loss):
-        if log_select == 'batch' and batch % 30 == 0 and batch != 0:
+        if log_select == 'batch' and batch % 300 == 0 and batch != 0:
             print(f'Step: {batch}/{self.steps_per_epoch}\n'
                   f'Discriminator Loss: {disc_loss[0]:2.5f}\n'
                   f'Accuracy: %{disc_loss[1] * 100:3.2f}\n'
                   f'Generator Loss: {float(gen_loss):2.5f}\n'
                   f'Sample images saved in: generated/IE-CGAN_epoch{epoch}_batch{batch}.png\n')
             self.save_sample_images(epoch, batch)
-        elif log_select == 'batch' and batch % 10 == 0 and batch != 0:
+        elif log_select == 'batch' and batch % 100 == 0 and batch != 0:
             print(f'Step: {batch}/{self.steps_per_epoch}\n'
                   f'Discriminator Loss: {disc_loss[0]:2.5f}\n'
                   f'Accuracy: %{disc_loss[1] * 100:3.2f}\n'
@@ -203,7 +203,7 @@ class Train:
         gen_imgs = 0.5 * gen_imgs + 0.5
         gen_imgs = np.array(gen_imgs * 255).astype(np.uint8)
 
-        r, c = 2, 6
+        r, c = 2, 3
         fig, axs = plt.subplots(r, c)
         cnt = 0
         for i in range(r):
@@ -211,5 +211,5 @@ class Train:
                 axs[i, j].imshow(gen_imgs[cnt, :, :, 0], cmap='gray')
                 axs[i, j].axis('off')
                 cnt += 1
-        fig.savefig(f"generated/IE-CGAN_epoch{epoch}_batch{step}.png")
+        fig.savefig(f"generated/IE-CGAN_epoch{epoch}_batch{step}.png", dpi=300)
         plt.close()
